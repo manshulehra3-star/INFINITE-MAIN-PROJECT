@@ -1,0 +1,1 @@
+"""InfiniteCore Bot package."""
