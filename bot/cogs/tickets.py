@@ -208,7 +208,7 @@ class Tickets(commands.Cog, name="Tickets"):
     def __init__(self, bot):
         self.bot = bot
 
-    # ─── Transcript builder ───
+    # ─── Transcript builders ───
     async def _html_transcript(self, channel: discord.TextChannel, row) -> discord.File:
         parts = []
         async for m in channel.history(limit=2000, oldest_first=True):
@@ -261,6 +261,7 @@ h1{{color:#5865F2;text-align:center}}
         return discord.File(io.BytesIO("\n".join(lines).encode()),
                             filename=f"transcript-{channel.name}.txt")
 
+    # ─── Create ticket ───
     async def create_ticket(self, i: discord.Interaction, category_key: str, subject: str, desc: str):
         g, u = i.guild, i.user
         meta = TICKET_CATEGORIES.get(category_key, TICKET_CATEGORIES["other"])
@@ -333,6 +334,7 @@ h1{{color:#5865F2;text-align:center}}
         lg.add_field(name="Subject", value=subject, inline=False)
         await send_log(g, TICKET_LOG_CHANNEL_ID, lg)
 
+    # ─── Close ticket ───
     async def close_ticket(self, channel: discord.TextChannel, closer: discord.Member, reason: str = "Closed"):
         row = self.bot.db.one("SELECT * FROM tickets WHERE channel_id=?", (channel.id,))
         if not row: return
@@ -379,4 +381,161 @@ h1{{color:#5865F2;text-align:center}}
                              f"Your ticket **{row['subject']}** closed.\n\nPlease rate our support:")
                 if transcript_url:
                     dm.add_field(name="Transcript", value=f"[Download]({transcript_url})", inline=False)
-                await
+                await u.send(embed=dm, view=RatingView(row["id"], row["claimed_by"]))
+            else:
+                dm = premium("🎫 Ticket Closed", f"Ticket **{row['subject']}** closed.")
+                if transcript_url:
+                    dm.add_field(name="Transcript", value=f"[Download]({transcript_url})", inline=False)
+                await u.send(embed=dm)
+        except: pass
+
+        lg = ICEmbed(title="🔒 Ticket Closed", color=0xED4245)
+        lg.add_field(name="User", value=f"<@{row['user_id']}>", inline=True)
+        lg.add_field(name="Closed by", value=closer.mention, inline=True)
+        lg.add_field(name="Reason", value=reason, inline=False)
+        if transcript_url: lg.add_field(name="Transcript", value=f"[View]({transcript_url})", inline=False)
+        await send_log(channel.guild, TICKET_LOG_CHANNEL_ID, lg)
+
+        await asyncio.sleep(5)
+        try: await channel.delete(reason=f"Closed by {closer}")
+        except: pass
+
+    # ═══════════════════════════════════════════════
+    #  SLASH COMMANDS
+    # ═══════════════════════════════════════════════
+
+    @app_commands.command(name="ticket", description="Ticket management")
+    @app_commands.describe(action="setup|close|config|ai|add|remove|priority|note|stats|quick")
+    async def ticket_cmd(self, i: discord.Interaction, action: str):
+        action = action.lower()
+
+        if action == "setup":
+            if not is_admin(i.user):
+                return await i.response.send_message(embed=err("Denied"), ephemeral=True)
+            e = premium("🎫 Support Tickets",
+                        "Select a category below to open a ticket.\n\n**Categories:**\n" +
+                        "\n".join(f"{m['emoji']} **{m['label']}** — {m['desc']}"
+                                  for m in TICKET_CATEGORIES.values()))
+            await i.channel.send(embed=e, view=TicketPanel())
+            await i.response.send_message(embed=ok("Panel Deployed"), ephemeral=True)
+
+        elif action == "close":
+            if not i.channel.name.startswith(TICKET_PREFIX):
+                return await i.response.send_message(embed=err("Not a ticket"), ephemeral=True)
+            row = self.bot.db.one("SELECT * FROM tickets WHERE channel_id=?", (i.channel.id,))
+            if not row: return await i.response.send_message(embed=err("Not found"), ephemeral=True)
+            if i.user.id != row["user_id"] and not is_staff(i.user):
+                return await i.response.send_message(embed=err("Denied"), ephemeral=True)
+            await i.response.send_message(embed=ok("Closing"))
+            await self.close_ticket(i.channel, i.user, reason="Manual")
+
+        elif action == "config":
+            if not is_admin(i.user):
+                return await i.response.send_message(embed=err("Denied"), ephemeral=True)
+            e = info("Ticket Config",
+                     f"Prefix: `{TICKET_PREFIX}`\nMax/user: `{MAX_TICKETS_PER_USER}`\n"
+                     f"Transcript: `{TICKET_TRANSCRIPT_FORMAT.upper()}`\nRating: `{TICKET_RATING_ENABLED}`")
+            await i.response.send_message(embed=e, ephemeral=True)
+
+        elif action == "ai":
+            if not is_admin(i.user):
+                return await i.response.send_message(embed=err("Denied"), ephemeral=True)
+            rows = self.bot.db.all("SELECT * FROM tickets WHERE status='open' ORDER BY id DESC LIMIT 5")
+            e = premium("🤖 AI Insights", "Open tickets:")
+            for r in rows:
+                e.add_field(name=f"#{r['id']} — {r['subject'][:40]}",
+                            value=f"<@{r['user_id']}> • {r['category']} • {r['priority']}", inline=False)
+            if not rows: e.description = "No open tickets."
+            await i.response.send_message(embed=e, ephemeral=True)
+
+        elif action == "add":
+            if not i.channel.name.startswith(TICKET_PREFIX):
+                return await i.response.send_message(embed=err("Not a ticket"), ephemeral=True)
+            if not is_staff(i.user):
+                return await i.response.send_message(embed=err("Denied"), ephemeral=True)
+            await i.response.send_modal(AddUserModal())
+
+        elif action == "remove":
+            if not is_staff(i.user):
+                return await i.response.send_message(embed=err("Denied"), ephemeral=True)
+            row = self.bot.db.one("SELECT * FROM tickets WHERE channel_id=?", (i.channel.id,))
+            if not row: return await i.response.send_message(embed=err("Not found"), ephemeral=True)
+            try:
+                m = i.guild.get_member(row["user_id"])
+                if m: await i.channel.set_permissions(m, overwrite=None)
+            except: pass
+            await i.response.send_message(embed=ok("Removed"))
+
+        elif action == "priority":
+            if not is_staff(i.user):
+                return await i.response.send_message(embed=err("Denied"), ephemeral=True)
+            await i.response.send_message("Choose:", view=PriorityView(i.channel.id), ephemeral=True)
+
+        elif action == "note":
+            if not is_staff(i.user):
+                return await i.response.send_message(embed=err("Denied"), ephemeral=True)
+            await i.response.send_modal(NoteModal(i.channel.id))
+
+        elif action == "quick":
+            if not is_staff(i.user):
+                return await i.response.send_message(embed=err("Denied"), ephemeral=True)
+            await i.response.send_message("⚡ Quick replies:", view=QuickReplyView(), ephemeral=True)
+
+        elif action == "stats":
+            if not is_staff(i.user):
+                return await i.response.send_message(embed=err("Denied"), ephemeral=True)
+            total = self.bot.db.one("SELECT COUNT(*) c FROM tickets")["c"]
+            opened = self.bot.db.one("SELECT COUNT(*) c FROM tickets WHERE status='open'")["c"]
+            closed = self.bot.db.one("SELECT COUNT(*) c FROM tickets WHERE status='closed'")["c"]
+            avg_row = self.bot.db.one("SELECT AVG(rating) a FROM ticket_ratings")
+            avg = avg_row["a"] if avg_row and avg_row["a"] else 0
+            e = premium("📊 Ticket Stats",
+                        f"**Total:** {total}\n**Open:** {opened}\n**Closed:** {closed}\n**Avg Rating:** {avg:.2f}⭐")
+            await i.response.send_message(embed=e, ephemeral=True)
+
+        else:
+            await i.response.send_message(
+                embed=err("Unknown", "setup|close|config|ai|add|remove|priority|note|stats|quick"),
+                ephemeral=True)
+
+    @app_commands.command(name="ticket-setup", description="🎫 Deploy ticket panel in this channel")
+    async def ticket_setup(self, i: discord.Interaction):
+        if not is_admin(i.user):
+            return await i.response.send_message(embed=err("Denied"), ephemeral=True)
+        e = premium("🎫 Support Tickets",
+                    "Select a category below to open a ticket.\n\n**Categories:**\n" +
+                    "\n".join(f"{m['emoji']} **{m['label']}** — {m['desc']}"
+                              for m in TICKET_CATEGORIES.values()))
+        await i.channel.send(embed=e, view=TicketPanel())
+        await i.response.send_message(embed=ok("Ticket Panel Deployed"), ephemeral=True)
+
+    @app_commands.command(name="ticket-blacklist", description="Blacklist user from tickets")
+    async def ticket_bl(self, i: discord.Interaction, user: discord.Member, reason: str = "No reason"):
+        if not is_admin(i.user): return await i.response.send_message(embed=err("Denied"), ephemeral=True)
+        self.bot.db.ex("INSERT OR REPLACE INTO tickets_blacklist (user_id,reason,added_at) VALUES (?,?,?)",
+                       (user.id, reason, now_iso()))
+        await i.response.send_message(embed=ok("Blacklisted", f"{user.mention} — {reason}"))
+
+    @app_commands.command(name="ticket-unblacklist", description="Remove from blacklist")
+    async def ticket_unbl(self, i: discord.Interaction, user: discord.Member):
+        if not is_admin(i.user): return await i.response.send_message(embed=err("Denied"), ephemeral=True)
+        self.bot.db.ex("DELETE FROM tickets_blacklist WHERE user_id=?", (user.id,))
+        await i.response.send_message(embed=ok("Unblacklisted", user.mention))
+
+    @app_commands.command(name="ticket-rename", description="Rename current ticket")
+    async def ticket_rename(self, i: discord.Interaction, name: str):
+        if not is_staff(i.user): return await i.response.send_message(embed=err("Denied"), ephemeral=True)
+        if not i.channel.name.startswith(TICKET_PREFIX):
+            return await i.response.send_message(embed=err("Not a ticket"), ephemeral=True)
+        try:
+            await i.channel.edit(name=f"{TICKET_PREFIX}-{name.lower()[:40]}")
+            await i.response.send_message(embed=ok("Renamed"))
+        except Exception as e:
+            await i.response.send_message(embed=err("Failed", str(e)), ephemeral=True)
+
+
+async def setup(bot):
+    cog = Tickets(bot)
+    await bot.add_cog(cog)
+    bot.add_view(TicketPanel())
+    bot.add_view(TicketControl())
