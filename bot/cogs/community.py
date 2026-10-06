@@ -159,4 +159,81 @@ class Community(commands.Cog, name="Community"):
         await msg.edit(view=SuggestionView())
         try:
             await msg.add_reaction("👍")
-            await msg.add
+            await msg.add_reaction("👎")
+        except: pass
+        await i.followup.send(embed=ok("Submitted", f"→ {msg.jump_url}"), ephemeral=True)
+
+    # ─── Poll ───
+    @app_commands.command(name="poll", description="Create a poll")
+    @app_commands.describe(question="Poll question",
+                           options="Comma-separated options (2-10)")
+    async def poll(self, i: discord.Interaction, question: str, options: str):
+        if not is_admin(i.user):
+            return await i.response.send_message(embed=err("Denied"), ephemeral=True)
+        opts = [o.strip() for o in options.split(",") if o.strip()][:10]
+        if len(opts) < 2:
+            return await i.response.send_message(embed=err("Min 2 options"), ephemeral=True)
+        emojis = ["1️⃣","2️⃣","3️⃣","4️⃣","5️⃣","6️⃣","7️⃣","8️⃣","9️⃣","🔟"]
+        desc = "\n".join(f"{emojis[idx]} {opt}" for idx, opt in enumerate(opts))
+        e = premium(f"📊 Poll — {question}", desc)
+        e.set_footer(text=f"Poll by {i.user}", icon_url=i.user.display_avatar.url)
+        await i.response.send_message(embed=e)
+        msg = await i.original_response()
+        for idx in range(len(opts)):
+            try:
+                await msg.add_reaction(emojis[idx])
+            except: pass
+
+    # ─── Rank ───
+    @app_commands.command(name="rank", description="View your level")
+    @app_commands.describe(member="Member (optional)")
+    async def rank(self, i: discord.Interaction, member: Optional[discord.Member] = None):
+        if not LEVELING_ENABLED:
+            return await i.response.send_message(embed=err("Leveling disabled"), ephemeral=True)
+        target = member or i.user
+        row = self.bot.db.one("SELECT * FROM levels WHERE user_id=? AND guild_id=?",
+                              (target.id, i.guild.id))
+        if not row:
+            return await i.response.send_message(
+                embed=info("No XP", f"{target.mention} has no XP yet."), ephemeral=True)
+        next_xp = xp_for_level(row["level"] + 1)
+        progress_pct = int((row["xp"] / next_xp) * 100) if next_xp else 0
+        bar_len = 20
+        filled = int(bar_len * progress_pct / 100)
+        bar = "▰" * filled + "▱" * (bar_len - filled)
+        e = premium(f"📊 {target.display_name}'s Rank",
+            f"**Level:** {row['level']}\n"
+            f"**XP:** {row['xp']} / {next_xp}\n"
+            f"`{bar}` {progress_pct}%\n"
+            f"**Messages:** {row['messages']}")
+        e.set_thumbnail(url=target.display_avatar.url)
+        await i.response.send_message(embed=e)
+
+    @app_commands.command(name="leaderboard", description="XP leaderboard")
+    async def leaderboard(self, i: discord.Interaction):
+        if not LEVELING_ENABLED:
+            return await i.response.send_message(embed=err("Leveling disabled"), ephemeral=True)
+        rows = self.bot.db.all("""SELECT * FROM levels WHERE guild_id=?
+                                  ORDER BY xp DESC LIMIT 10""", (i.guild.id,))
+        e = premium("🏆 XP Leaderboard", f"Top 10 in **{i.guild.name}**")
+        if not rows:
+            e.description = "No data yet."
+        medals = ["🥇", "🥈", "🥉"]
+        for idx, r in enumerate(rows):
+            medal = medals[idx] if idx < 3 else f"`#{idx+1}`"
+            try:
+                m = i.guild.get_member(r["user_id"])
+                name = m.display_name if m else f"User {r['user_id']}"
+            except:
+                name = f"User {r['user_id']}"
+            e.add_field(name=f"{medal} {name}",
+                        value=f"Level **{r['level']}** • {r['xp']} XP",
+                        inline=False)
+        await i.response.send_message(embed=e)
+
+
+async def setup(bot):
+    await bot.add_cog(Community(bot))
+    # Persistent views
+    bot.add_view(GiveawayView())
+    bot.add_view(SuggestionView())
