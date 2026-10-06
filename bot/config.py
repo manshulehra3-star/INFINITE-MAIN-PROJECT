@@ -42,11 +42,14 @@ GUILD_ID      = _int("GUILD_ID")
 OWNER_ID      = _int("OWNER_ID")
 DEVELOPER_IDS = _ids("DEVELOPER_IDS")
 
-# ─── Roles ───
+# ─── Roles (ALL) ───
 ADMIN_ROLE_IDS     = _ids("ADMIN_ROLE_IDS")
 STAFF_ROLE_IDS     = _ids("STAFF_ROLE_IDS")
 SUPPORT_ROLE_IDS   = _ids("SUPPORT_ROLE_IDS")
 MODERATOR_ROLE_IDS = _ids("MODERATOR_ROLE_IDS")
+VERIFIED_ROLE_ID   = _int("VERIFIED_ROLE_ID", 0)
+MUTED_ROLE_ID      = _int("MUTED_ROLE_ID", 0)
+AUTO_ROLL_ROLE_ID  = _int("AUTO_ROLL_ROLE_ID", 0)
 
 # ─── Channels ───
 TICKET_CATEGORY_ID           = _int("TICKET_CATEGORY_ID")
@@ -83,7 +86,7 @@ TICKET_QUICK_REPLIES      = _list_pipe("TICKET_QUICK_REPLIES")
 
 # ─── AI ───
 AI_ENABLED         = _bool("AI_ENABLED", True)
-AI_MODEL           = os.getenv("AI_MODEL", "llama3")
+AI_MODEL           = os.getenv("AI_MODEL", "qwen3:0.6b")
 AI_HOST            = os.getenv("AI_HOST", "http://127.0.0.1:11434")
 AI_MAX_TOKENS      = _int("AI_MAX_TOKENS", 512)
 AI_TEMPERATURE     = _float("AI_TEMPERATURE", 0.7)
@@ -91,11 +94,11 @@ AI_MENTION_TRIGGER = _bool("AI_MENTION_TRIGGER", True)
 AI_TIMEOUT_SECONDS = _int("AI_TIMEOUT_SECONDS", 90)
 
 # ─── Payments ───
-CURRENCY        = os.getenv("CURRENCY", "INR")
-CURRENCY_SYMBOL = os.getenv("CURRENCY_SYMBOL", "₹")
-UPI_ID          = os.getenv("UPI_ID", "")
-PAYMENT_MIN     = _float("PAYMENT_MIN_AMOUNT", 1)
-PAYMENT_MAX     = _float("PAYMENT_MAX_AMOUNT", 100000)
+CURRENCY         = os.getenv("CURRENCY", "INR")
+CURRENCY_SYMBOL  = os.getenv("CURRENCY_SYMBOL", "₹")
+UPI_ID           = os.getenv("UPI_ID", "")
+PAYMENT_MIN      = _float("PAYMENT_MIN_AMOUNT", 1)
+PAYMENT_MAX      = _float("PAYMENT_MAX_AMOUNT", 100000)
 
 # ─── VPS ───
 VPS_DEFAULT_RAM      = _int("VPS_DEFAULT_RAM", 2048)
@@ -105,22 +108,22 @@ VPS_AUTO_EXPIRE_DAYS = _int("VPS_AUTO_EXPIRE_DAYS", 30)
 VPS_MAX_PER_USER     = _int("VPS_MAX_PER_USER", 5)
 
 # ─── Pterodactyl ───
-PTERO_PANEL_URL  = os.getenv("PTERO_PANEL_URL", "")
-PTERO_API_KEY    = os.getenv("PTERO_API_KEY", "")
-PTERO_NODE_ID    = _int("PTERO_NODE_ID", 1)
+PTERO_PANEL_URL = os.getenv("PTERO_PANEL_URL", "")
+PTERO_API_KEY   = os.getenv("PTERO_API_KEY", "")
+PTERO_NODE_ID   = _int("PTERO_NODE_ID", 1)
 
-# ─── MC ───
+# ─── Minecraft ───
 MC_DEFAULT_VERSION = os.getenv("MC_DEFAULT_VERSION", "1.20.4")
 MC_MAX_PER_USER    = _int("MC_MAX_PER_USER", 3)
 MC_DEFAULT_RAM     = _int("MC_DEFAULT_RAM", 2048)
 MC_DEFAULT_PORT    = _int("MC_DEFAULT_PORT", 25565)
 
 # ─── Moderation ───
-AUTOMOD_ENABLED     = _bool("AUTOMOD_ENABLED", True)
-AUTOMOD_BAD_WORDS   = _list("AUTOMOD_BAD_WORDS")
-AUTOMOD_SPAM_THRESH = _int("AUTOMOD_SPAM_THRESHOLD", 5)
-AUTOMOD_CAPS_PCT    = _int("AUTOMOD_CAPS_PERCENT", 70)
-AUTOMOD_INVITE_BLOCK= _bool("AUTOMOD_INVITE_BLOCK", True)
+AUTOMOD_ENABLED        = _bool("AUTOMOD_ENABLED", True)
+AUTOMOD_BAD_WORDS      = _list("AUTOMOD_BAD_WORDS")
+AUTOMOD_SPAM_THRESHOLD = _int("AUTOMOD_SPAM_THRESHOLD", 5)
+AUTOMOD_CAPS_PERCENT   = _int("AUTOMOD_CAPS_PERCENT", 70)
+AUTOMOD_INVITE_BLOCK   = _bool("AUTOMOD_INVITE_BLOCK", True)
 
 # ─── Welcome ───
 WELCOME_ENABLED = _bool("WELCOME_ENABLED", True)
