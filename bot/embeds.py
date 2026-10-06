@@ -1,7 +1,7 @@
 """InfiniteCore Bot — Embed helpers"""
 import datetime
 import discord
-from . import config as C
+import config as C
 
 class ICEmbed(discord.Embed):
     def __init__(self, **kw):
